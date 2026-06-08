@@ -47,7 +47,7 @@ Un dashboard de monitoring réseau moderne et premium pour votre BBox Bouygues T
 Le moyen le plus simple et rapide d'installer BboxPulse est d'utiliser le script d'installation interactif fourni. Il se charge de vérifier/installer Docker et Docker Compose, de configurer votre mot de passe Bbox de façon sécurisée et de lancer l'application.
 
 ```bash
-git clone https://github.com/votre-username/bbox-pulse.git
+git clone https://github.com/Galaxixoff1/bbox-pulse.git
 cd bbox-pulse
 chmod +x setup.sh
 ./setup.sh
