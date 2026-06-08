@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BboxPulse – Graphiques</title>
+    <meta name="description" content="Graphiques historiques de monitoring réseau BBox – vitesse et appareils connectés.">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+<body>
+    <div class="app">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">
+                <span class="dot"></span>
+                <span>Monitoring Réseau</span>
+            </div>
+            <h1>BboxPulse</h1>
+            <div class="header-time" id="clock">--:--:--</div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-bar">
+            <a href="/" class="nav-btn">Dashboard</a>
+            <a href="/graph" class="nav-btn active">Graphiques</a>
+            <a href="/setting" class="nav-btn">Config</a>
+        </nav>
+
+        <!-- Timeframe Controls -->
+        <div class="charts-controls">
+            <button class="timeframe-btn active" data-timeframe="live">Live</button>
+            <button class="timeframe-btn" data-timeframe="1h">1H</button>
+            <button class="timeframe-btn" data-timeframe="24h">24H</button>
+            <button class="timeframe-btn" data-timeframe="7d">7J</button>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid" style="grid-template-columns: 1fr;">
+            <!-- Speed Chart -->
+            <div class="card">
+                <div class="card-label">
+                    <span class="icon">📈</span>
+                    <span>Vitesse de Connexion</span>
+                </div>
+                <div class="chart-container chart-lg">
+                    <canvas id="chart-hist-speed"></canvas>
+                </div>
+            </div>
+
+            <!-- Network Chart -->
+            <div class="card">
+                <div class="card-label">
+                    <span class="icon">📉</span>
+                    <span>Appareils Connectés</span>
+                </div>
+                <div class="chart-container chart-lg">
+                    <canvas id="chart-hist-network"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            BboxPulse v2.0 · Docker Edition
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

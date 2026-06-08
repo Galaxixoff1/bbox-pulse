@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BboxPulse – Dashboard</title>
+    <meta name="description" content="Dashboard temps réel de monitoring réseau BBox – vitesse, consommation, prévisions.">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+<body>
+    <div class="app">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">
+                <span class="dot"></span>
+                <span>Monitoring Réseau</span>
+            </div>
+            <h1>BboxPulse</h1>
+            <div class="header-time" id="clock">--:--:--</div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-bar">
+            <a href="/" class="nav-btn active">Dashboard</a>
+            <a href="/graph" class="nav-btn">Graphiques</a>
+            <a href="/setting" class="nav-btn">Config</a>
+        </nav>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="status-bar">
+            <span class="indicator"></span>
+            <span id="status-text">Connexion...</span>
+        </div>
+
+        <!-- Error Banner -->
+        <div class="error-banner" id="error-banner">
+            ⚠️ <span id="error-text"></span>
+        </div>
+
+        <!-- ─── DASHBOARD ─── -->
+        <div class="grid" id="card-grid">
+
+            <!-- Speed Card -->
+            <div class="card skeleton" id="card-speed">
+                <div class="card-label">
+                    <span class="icon">⚡</span>
+                    <span>Vitesse Instantanée</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Download</div>
+                        <div class="metric-value blue" id="speed-down">—</div>
+                        <div class="speed-gauge"><div class="speed-gauge-fill blue" id="gauge-down" style="width:0%"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Upload</div>
+                        <div class="metric-value violet" id="speed-up">—</div>
+                        <div class="speed-gauge"><div class="speed-gauge-fill violet" id="gauge-up" style="width:0%"></div></div>
+                    </div>
+                </div>
+                <div class="chart-container chart-sm">
+                    <canvas id="chart-speed"></canvas>
+                </div>
+            </div>
+
+            <!-- Session Card -->
+            <div class="card skeleton" id="card-session">
+                <div class="card-label">
+                    <span class="icon">📥</span>
+                    <span>Session Box</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Download</div>
+                        <div class="metric-value blue" id="session-down">—</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Upload</div>
+                        <div class="metric-value violet" id="session-up">—</div>
+                    </div>
+                </div>
+                <div class="chart-container chart-sm">
+                    <canvas id="chart-session"></canvas>
+                </div>
+            </div>
+
+            <!-- Réseau Local Card -->
+            <div class="card skeleton" id="card-network">
+                <div class="card-label">
+                    <span class="icon">📱</span>
+                    <span>Réseau Local</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Actifs</div>
+                        <div class="metric-value green" id="net-active">—</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Connus</div>
+                        <div class="metric-value orange" id="net-known">—</div>
+                    </div>
+                </div>
+                <div class="chart-container chart-sm">
+                    <canvas id="chart-network"></canvas>
+                </div>
+            </div>
+
+            <!-- Wi-Fi Card -->
+            <div class="card skeleton" id="card-wifi">
+                <div class="card-label">
+                    <span class="icon">📶</span>
+                    <span>Wi-Fi</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">2.4 GHz / 5 GHz</div>
+                        <div class="metric-value blue" id="wifi-24-5" style="font-size: 16px;">— / —</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">6 GHz / Wi-Fi 7</div>
+                        <div class="metric-value violet" id="wifi-6-mlo" style="font-size: 16px;">— / —</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Line Specs Card -->
+            <div class="card skeleton" id="card-linespecs">
+                <div class="card-label">
+                    <span class="icon">📡</span>
+                    <span>Spécifications Ligne</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Max Download</div>
+                        <div class="metric-value blue" id="spec-max" style="font-size: 22px;">—</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Contrat</div>
+                        <div class="metric-value violet" id="spec-contract" style="font-size: 22px;">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hardware Card -->
+            <div class="card skeleton" id="card-hardware">
+                <div class="card-label">
+                    <span class="icon">🔧</span>
+                    <span>Matériel</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Paquets (RX / TX)</div>
+                        <div class="metric-value green" id="hw-packets" style="font-size: 16px;">— / —</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Erreurs (RX / TX)</div>
+                        <div class="metric-value orange" id="hw-errors" style="font-size: 16px;">— / —</div>
+                    </div>
+                </div>
+                <div class="chart-container chart-sm">
+                    <canvas id="chart-hardware"></canvas>
+                </div>
+            </div>
+
+            <!-- Objective Card -->
+            <div class="card card-full skeleton" id="card-objective">
+                <div class="card-label">
+                    <span class="icon">🎯</span>
+                    <span>Objectif</span>
+                </div>
+                <div class="progress-header">
+                    <span class="progress-target" id="target">Objectif : —</span>
+                    <span class="progress-percent" id="progress-percent">—</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+                </div>
+                <div class="eta-row">
+                    <div class="eta-item">
+                        <div class="eta-label">ETA Estimée</div>
+                        <div class="eta-value" id="eta-avg">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Card -->
+            <div class="card card-full total-card skeleton" id="card-total">
+                <div class="card-label">
+                    <span class="icon">🏦</span>
+                    <span>Total Cumulé</span>
+                </div>
+                <div class="card-row">
+                    <div class="metric">
+                        <div class="metric-label">Total Download</div>
+                        <div class="metric-value blue" id="total-down">—</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Total Upload</div>
+                        <div class="metric-value violet" id="total-up">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            BboxPulse v2.0 · Docker Edition
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

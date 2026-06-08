@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+bbox_history.json
+bbox_timeseries.json
+data/

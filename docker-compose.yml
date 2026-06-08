@@ -1,0 +1,48 @@
+services:
+  bbox-pulse:
+    build: .
+    container_name: bbox-pulse
+    restart: always
+    init: true
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      - BBOX_PASSWORD=${BBOX_PASSWORD}
+      - BBOX_BASE_URL=${BBOX_BASE_URL:-https://mabbox.bytel.fr}
+      - REDIS_URL=redis://redis:6379/0
+      - MONITOR_INTERVAL=${MONITOR_INTERVAL:-60}
+      - UPTIME_START_DATE=${UPTIME_START_DATE:-2026-05-18}
+      - TARGET_TB=${TARGET_TB:-5}
+    volumes:
+      - bboxpulse-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bbox-net
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    container_name: bbox-pulse-redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bbox-net
+
+volumes:
+  bboxpulse-data:
+  redis-data:
+
+networks:
+  bbox-net:
+    driver: bridge
+

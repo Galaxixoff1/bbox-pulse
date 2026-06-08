@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BboxPulse – Configuration</title>
+    <meta name="description" content="Configuration du monitoring réseau BBox – paramètres, objectifs, historique.">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+<body>
+    <div class="app">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-badge">
+                <span class="dot"></span>
+                <span>Monitoring Réseau</span>
+            </div>
+            <h1>BboxPulse</h1>
+            <div class="header-time" id="clock">--:--:--</div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-bar">
+            <a href="/" class="nav-btn">Dashboard</a>
+            <a href="/graph" class="nav-btn">Graphiques</a>
+            <a href="/setting" class="nav-btn active">Config</a>
+        </nav>
+
+        <!-- ─── CONFIG VIEW ─── -->
+        <div class="grid" style="grid-template-columns: 1fr;">
+
+            <!-- System Status -->
+            <div class="card" id="card-system">
+                <div class="card-label">
+                    <span class="icon">🖥️</span>
+                    <span>Statut Système</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Redis</span>
+                    <span id="redis-status" class="status-badge disconnected">
+                        <span class="dot-sm"></span>
+                        <span>Vérification...</span>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Uptime Infrastructure</span>
+                    <span class="info-value" id="uptime-days">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Intervalle de collecte</span>
+                    <span class="info-value" id="monitor-interval-display">—</span>
+                </div>
+            </div>
+
+            <!-- BBox Connection -->
+            <div class="card" id="card-config-bbox">
+                <div class="card-label">
+                    <span class="icon">🔗</span>
+                    <span>Connexion BBox</span>
+                </div>
+
+                <div class="settings-group">
+                    <div class="settings-field">
+                        <label for="cfg-password">Mot de passe BBox</label>
+                        <input type="password" id="cfg-password" class="settings-input" placeholder="••••••••">
+                    </div>
+                    <div class="settings-field">
+                        <label for="cfg-base-url">URL de la BBox</label>
+                        <input type="text" id="cfg-base-url" class="settings-input" placeholder="https://mabbox.bytel.fr">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Settings -->
+            <div class="card" id="card-config-dashboard">
+                <div class="card-label">
+                    <span class="icon">📊</span>
+                    <span>Paramètres Dashboard</span>
+                </div>
+
+                <div class="settings-group">
+                    <div class="settings-field">
+                        <label for="cfg-refresh">Refresh UI (ms)</label>
+                        <input type="number" id="cfg-refresh" class="settings-input" placeholder="4000" min="1000" step="500">
+                    </div>
+                    <div class="settings-field">
+                        <label for="cfg-monitor-interval">Collecte Backend (sec)</label>
+                        <input type="number" id="cfg-monitor-interval" class="settings-input" placeholder="60" min="10" step="5">
+                    </div>
+                    <div class="settings-field">
+                        <label for="cfg-max-points">Points max graphiques</label>
+                        <input type="number" id="cfg-max-points" class="settings-input" placeholder="60" min="20" max="200">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Objective Settings -->
+            <div class="card" id="card-config-objective">
+                <div class="card-label">
+                    <span class="icon">🎯</span>
+                    <span>Objectif & Historique</span>
+                </div>
+
+                <div class="settings-group">
+                    <div class="settings-field">
+                        <label for="cfg-target-tb">Objectif Cible (To)</label>
+                        <input type="number" id="cfg-target-tb" class="settings-input" placeholder="5" min="1" step="0.5">
+                    </div>
+                    <div class="settings-field">
+                        <label for="cfg-uptime-date">Date début infra</label>
+                        <input type="date" id="cfg-uptime-date" class="settings-input">
+                    </div>
+                </div>
+
+                <div class="settings-section-title" style="margin-top: 20px;">
+                    📝 Corriger le Total Cumulé
+                </div>
+                <div class="settings-group">
+                    <div class="settings-field">
+                        <label for="cfg-total-down-tb">Total Download (To)</label>
+                        <input type="number" id="cfg-total-down-tb" class="settings-input" placeholder="Ex: 14.5" step="0.001" min="0">
+                    </div>
+                    <div class="settings-field">
+                        <label for="cfg-total-up-gb">Total Upload (Go)</label>
+                        <input type="number" id="cfg-total-up-gb" class="settings-input" placeholder="Ex: 900" step="0.1" min="0">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Actions -->
+            <div class="card" id="card-config-actions">
+                <div class="settings-actions" style="border-top: none; padding-top: 0;">
+                    <button id="btn-save-config" class="settings-btn">💾 Sauvegarder la Configuration</button>
+                    <button id="btn-save-total" class="settings-btn secondary">📊 Appliquer le Total</button>
+                </div>
+                <div id="config-message" class="settings-message"></div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            BboxPulse v2.0 · Docker Edition
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
