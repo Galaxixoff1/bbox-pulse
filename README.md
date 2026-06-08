@@ -42,6 +42,17 @@ Un dashboard de monitoring réseau moderne et premium pour votre BBox Bouygues T
 
 ---
 
+## 🔌 Compatibilité Bbox
+
+Ce projet interagit avec l'API locale officielle de la Bbox. Il a été validé et activement testé avec :
+*   **Offre** : Bbox Ultym
+*   **Modèle matériel** : Sagemcom `F@st5696b` (Wi-Fi 6E/7)
+*   **Version du firmware** : `25.5.30`
+
+*Note : L'API locale Bouygues Telecom étant standardisée, le dashboard devrait fonctionner sur la plupart des modèles de Bbox récentes (Wi-Fi 6, 6E et 7). Si vous testez avec succès un autre modèle, n'hésitez pas à le signaler !*
+
+---
+
 ## 🚀 Déploiement Rapide
 
 Le moyen le plus simple et rapide d'installer BboxPulse est d'utiliser le script d'installation interactif fourni. Il se charge de vérifier/installer Docker et Docker Compose, de configurer votre mot de passe Bbox de façon sécurisée et de lancer l'application.
