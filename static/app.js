@@ -37,6 +37,8 @@ const els = {
     cardGrid: $('card-grid'),
     specMax: $('spec-max'),
     specContract: $('spec-contract'),
+    sysModelFirmware: $('sys-model-firmware'),
+    sysConnIp: $('sys-conn-ip'),
     hwPackets: $('hw-packets'),
     hwErrors: $('hw-errors'),
     netActive: $('net-active'),
@@ -215,6 +217,13 @@ async function fetchStats() {
             setValue(els.specMax, d.line_specs.max_down);
             setValue(els.specContract, d.line_specs.contract_down);
         }
+
+        // System Info
+        if (d.system) {
+            setValue(els.sysModelFirmware, `${d.system.model} / ${d.system.firmware}`);
+            setValue(els.sysConnIp, `${d.system.connection_type} / ${d.system.public_ip}`);
+        }
+
 
         // Hardware
         if (d.hardware) {

@@ -19,6 +19,9 @@ URL_LOGIN = f"{BBOX_BASE_URL}/api/v1/login"
 URL_STATS = f"{BBOX_BASE_URL}/api/v1/wan/ip/stats"
 URL_WIFI = f"{BBOX_BASE_URL}/api/v1/wireless"
 URL_HOSTS = f"{BBOX_BASE_URL}/api/v1/hosts"
+URL_DEVICE = f"{BBOX_BASE_URL}/api/v1/device"
+URL_WAN_IP = f"{BBOX_BASE_URL}/api/v1/wan/ip"
+
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 MONITOR_INTERVAL = int(os.getenv('MONITOR_INTERVAL', '60'))
@@ -411,8 +414,38 @@ def api_stats():
     try:
         response_wifi = bbox_session.get(URL_WIFI, timeout=15)
         response_hosts = bbox_session.get(URL_HOSTS, timeout=15)
+        response_device = bbox_session.get(URL_DEVICE, timeout=10)
+        response_wan_ip = bbox_session.get(URL_WAN_IP, timeout=10)
 
         # --- PARSING ---
+        # Parse System info
+        sys_model = "Bbox"
+        sys_firmware = "Inconnue"
+        sys_connection = "Inconnue"
+        sys_ip = "Inconnu"
+
+        if response_device.status_code == 200:
+            try:
+                dev_data = response_device.json()[0]['device']
+                sys_model = dev_data.get('modelname', 'Bbox')
+                sys_firmware = dev_data.get('running', {}).get('version', 'Inconnue')
+                using = dev_data.get('using', {})
+                if using.get('ftth') == 1:
+                    sys_connection = "Fibre (FTTH)"
+                elif using.get('vdsl') == 1:
+                    sys_connection = "VDSL"
+                elif using.get('adsl') == 1:
+                    sys_connection = "ADSL"
+            except Exception:
+                pass
+
+        if response_wan_ip.status_code == 200:
+            try:
+                wan_data = response_wan_ip.json()[0]['wan']
+                sys_ip = wan_data.get('ip', {}).get('address', 'Inconnu')
+            except Exception:
+                pass
+
         data_stats = response_stats.json()
         stats = data_stats[0]['wan']['ip']['stats']
         rx_stats = stats.get('rx', {})
@@ -491,6 +524,12 @@ def api_stats():
             "total": {
                 "down": human_bytes(history['bank_rx']),
                 "up": human_bytes(history['bank_tx'])
+            },
+            "system": {
+                "model": sys_model,
+                "firmware": sys_firmware,
+                "connection_type": sys_connection,
+                "public_ip": sys_ip
             },
             "timestamp": datetime.now().strftime("%H:%M:%S")
         })
