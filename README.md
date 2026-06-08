@@ -198,6 +198,13 @@ docker exec -it bbox-pulse-redis redis-cli
 
 ---
 
+## 💬 Communauté & Support
+
+Pour toute question, suggestion ou besoin d'aide pour l'installation, rejoignez notre serveur Discord **Galaxix Labs** !
+👉 [Rejoindre le serveur Discord Galaxix Labs](https://discord.gg/TKHFvXe9Nb)
+
+---
+
 ## 📄 Licence
 
 Ce projet est sous licence MIT. N'hésitez pas à l'utiliser et à l'améliorer !
