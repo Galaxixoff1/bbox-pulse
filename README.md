@@ -12,6 +12,24 @@ Un dashboard de monitoring réseau moderne et premium pour votre BBox Bouygues T
 
 ---
 
+### 📸 Aperçu du Dashboard
+
+| Dashboard Principal | Équipements Réseau |
+| :---: | :---: |
+| ![Dashboard Principal](screenshots/01_dashboard_main.png) | ![Équipements Réseau](screenshots/02_dashboard_devices.png) |
+
+| Graphiques Historiques | Configuration |
+| :---: | :---: |
+| ![Graphiques](screenshots/03_graphs.png) | ![Configuration](screenshots/04_settings.png) |
+
+<p align="center">
+  <img src="screenshots/05_dashboard_mobile.png" width="300" alt="Version Mobile" />
+  <br>
+  <em>Interface responsive (optimisée pour mobile)</em>
+</p>
+
+---
+
 ## ✨ Fonctionnalités
 
 *   **⚡ Débits en temps réel** : Graphiques sparkline réactifs pour suivre vos débits descendants (download) et ascendants (upload).
