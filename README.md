@@ -44,27 +44,31 @@ Un dashboard de monitoring réseau moderne et premium pour votre BBox Bouygues T
 
 ## 🚀 Déploiement Rapide
 
-### Prérequis
-
-*   [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/install/)
-
-### 1. Cloner le projet
+Le moyen le plus simple et rapide d'installer BboxPulse est d'utiliser le script d'installation interactif fourni. Il se charge de vérifier/installer Docker et Docker Compose, de configurer votre mot de passe Bbox de façon sécurisée et de lancer l'application.
 
 ```bash
 git clone https://github.com/votre-username/bbox-pulse.git
 cd bbox-pulse
+chmod +x setup.sh
+./setup.sh
 ```
 
+---
+
+## 🛠️ Déploiement Manuel (Alternative)
+
+Si vous préférez installer l'application vous-même sans le script :
+
+### 1. Prérequis
+Assurez-vous d'avoir installé [Docker](https://docs.docker.com/get-docker/) et [Docker Compose](https://docs.docker.com/compose/install/).
+
 ### 2. Configurer les variables d'environnement
-
-Copiez le fichier d'exemple et renseignez vos informations :
-
+Copiez le fichier d'exemple et renseignez vos informations dans le fichier `.env` :
 ```bash
 cp .env.example .env
 ```
 
-Éditez le fichier `.env` :
-
+Modifiez les variables dans le `.env` :
 ```env
 # Mot de passe de votre Bbox (Requis)
 BBOX_PASSWORD=votre_mot_de_passe
@@ -83,9 +87,7 @@ UPTIME_START_DATE=2026-05-18
 ```
 
 ### 3. Démarrer l'application
-
 Lancez la stack avec Docker Compose :
-
 ```bash
 docker compose up -d --build
 ```
