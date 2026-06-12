@@ -104,6 +104,67 @@ def human_speed(kbps):
         return f"{val:.0f} Kb/s"
     return "0 Kb/s"
 
+# State tracking for real-time speed calculation (separate for API and Monitor)
+api_speed_state = {
+    "rx": 0,
+    "tx": 0,
+    "time": 0.0,
+    "speed_down": 0.0,
+    "speed_up": 0.0
+}
+api_speed_lock = threading.Lock()
+
+monitor_speed_state = {
+    "rx": 0,
+    "tx": 0,
+    "time": 0.0,
+    "speed_down": 0.0,
+    "speed_up": 0.0
+}
+monitor_speed_lock = threading.Lock()
+
+def calculate_speed(curr_rx, curr_tx, state_dict, lock):
+    """Calculate speed in Kbps based on delta bytes and delta time."""
+    now = time.time()
+    with lock:
+        if state_dict["time"] == 0 or state_dict["rx"] == 0:
+            state_dict["rx"] = curr_rx
+            state_dict["tx"] = curr_tx
+            state_dict["time"] = now
+            return 0.0, 0.0
+        
+        dt = now - state_dict["time"]
+        if dt < 0.5:
+            return state_dict["speed_down"], state_dict["speed_up"]
+            
+        delta_rx = curr_rx - state_dict["rx"]
+        delta_tx = curr_tx - state_dict["tx"]
+        
+        # If box restarted or bytes wrapped
+        if delta_rx < 0 or delta_tx < 0:
+            state_dict["rx"] = curr_rx
+            state_dict["tx"] = curr_tx
+            state_dict["time"] = now
+            return 0.0, 0.0
+            
+        # Speed in Kbps (kilobits per second)
+        # bytes * 8 = bits. bits / dt / 1000 = Kbps.
+        speed_down = (delta_rx * 8) / (dt * 1000)
+        speed_up = (delta_tx * 8) / (dt * 1000)
+        
+        # Protect against anomalous huge spikes
+        if speed_down > 10000000 or speed_up > 10000000:
+            return state_dict["speed_down"], state_dict["speed_up"]
+            
+        state_dict["rx"] = curr_rx
+        state_dict["tx"] = curr_tx
+        state_dict["time"] = now
+        state_dict["speed_down"] = speed_down
+        state_dict["speed_up"] = speed_up
+        
+        return speed_down, speed_up
+
+
 def human_eta(days):
     """Format ETA days to readable string."""
     if days <= 0:
@@ -324,7 +385,15 @@ def background_monitor():
             resp = bbox_session.get(URL_STATS, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
-                stats = data[0]['wan']['ip']['stats']
+                
+                # Safe stats extraction
+                if isinstance(data, list) and len(data) > 0:
+                    stats = data[0].get('wan', {}).get('ip', {}).get('stats', {})
+                elif isinstance(data, dict):
+                    stats = data.get('wan', {}).get('ip', {}).get('stats', {})
+                else:
+                    stats = {}
+                    
                 rx_stats = stats.get('rx', {})
                 tx_stats = stats.get('tx', {})
                 curr_rx = int(rx_stats.get('bytes', 0))
@@ -336,7 +405,13 @@ def background_monitor():
                 try:
                     hosts_res = bbox_session.get(URL_HOSTS, timeout=10)
                     if hosts_res.status_code == 200:
-                        host_list = hosts_res.json()[0]['hosts'].get('list', [])
+                        hosts_json = hosts_res.json()
+                        if isinstance(hosts_json, list) and len(hosts_json) > 0:
+                            host_list = hosts_json[0].get('hosts', {}).get('list', [])
+                        elif isinstance(hosts_json, dict):
+                            host_list = hosts_json.get('hosts', {}).get('list', [])
+                        else:
+                            host_list = []
                         active_dev = sum(1 for d in host_list if d.get('active') == 1)
                         known_dev = len(host_list)
                     else:
@@ -344,8 +419,7 @@ def background_monitor():
                 except Exception:
                     active_dev, known_dev = 0, 0
 
-                spd_dn = rx_stats.get('bandwidth', 0) / 1000
-                spd_up = tx_stats.get('bandwidth', 0) / 1000
+                spd_dn, spd_up = calculate_speed(curr_rx, curr_tx, monitor_speed_state, monitor_speed_lock)
                 record_timeseries(spd_dn, spd_up, active_dev, known_dev)
             elif resp.status_code in (401, 403):
                 print("⚠️ Session expirée, reconnexion...")
@@ -391,7 +465,12 @@ def api_stats():
         try:
             resp = bbox_session.get(URL_STATS, timeout=15)
             data = resp.json()
-            _ = data[0]['wan']['ip']['stats']
+            if isinstance(data, list) and len(data) > 0:
+                _ = data[0]['wan']['ip']['stats']
+            elif isinstance(data, dict):
+                _ = data['wan']['ip']['stats']
+            else:
+                return None
             return resp
         except Exception:
             return None
@@ -426,7 +505,13 @@ def api_stats():
 
         if response_device.status_code == 200:
             try:
-                dev_data = response_device.json()[0]['device']
+                dev_json = response_device.json()
+                if isinstance(dev_json, list) and len(dev_json) > 0:
+                    dev_data = dev_json[0].get('device', {})
+                elif isinstance(dev_json, dict):
+                    dev_data = dev_json.get('device', {})
+                else:
+                    dev_data = {}
                 sys_model = dev_data.get('modelname', 'Bbox')
                 sys_firmware = dev_data.get('running', {}).get('version', 'Inconnue')
                 using = dev_data.get('using', {})
@@ -441,26 +526,67 @@ def api_stats():
 
         if response_wan_ip.status_code == 200:
             try:
-                wan_data = response_wan_ip.json()[0]['wan']
+                wan_json = response_wan_ip.json()
+                if isinstance(wan_json, list) and len(wan_json) > 0:
+                    wan_data = wan_json[0].get('wan', {})
+                elif isinstance(wan_json, dict):
+                    wan_data = wan_json.get('wan', {})
+                else:
+                    wan_data = {}
                 sys_ip = wan_data.get('ip', {}).get('address', 'Inconnu')
             except Exception:
                 pass
 
         data_stats = response_stats.json()
-        stats = data_stats[0]['wan']['ip']['stats']
+        if isinstance(data_stats, list) and len(data_stats) > 0:
+            stats = data_stats[0].get('wan', {}).get('ip', {}).get('stats', {})
+        elif isinstance(data_stats, dict):
+            stats = data_stats.get('wan', {}).get('ip', {}).get('stats', {})
+        else:
+            stats = {}
+            
         rx_stats = stats.get('rx', {})
         tx_stats = stats.get('tx', {})
         curr_rx = int(rx_stats.get('bytes', 0))
         curr_tx = int(tx_stats.get('bytes', 0))
 
-        data_wifi = response_wifi.json()[0]['wireless']
-        radio = data_wifi.get('radio', {})
-        r_24, r_5, r_6 = radio.get('24', {}), radio.get('5', {}), radio.get('6', {})
-        mlo_data = data_wifi.get('mlo', {})
+        # Safe parsing for WIFI
+        data_wifi = {}
+        radio = {}
+        r_24, r_5, r_6 = {}, {}, {}
+        mlo_data = {}
+        if response_wifi.status_code == 200:
+            try:
+                wifi_json = response_wifi.json()
+                if isinstance(wifi_json, list) and len(wifi_json) > 0:
+                    data_wifi = wifi_json[0].get('wireless', {})
+                elif isinstance(wifi_json, dict):
+                    data_wifi = wifi_json.get('wireless', {})
+                
+                radio = data_wifi.get('radio', {})
+                r_24 = radio.get('24', {})
+                r_5 = radio.get('5', {})
+                r_6 = radio.get('6', {})
+                mlo_data = data_wifi.get('mlo', {})
+            except Exception as e:
+                print(f"⚠️ Erreur parsing WiFi: {e}")
 
-        host_list = response_hosts.json()[0]['hosts'].get('list', [])
-        active_devices = sum(1 for device in host_list if device.get('active') == 1)
-        total_known = len(host_list)
+        # Safe parsing for Hosts
+        active_devices = 0
+        total_known = 0
+        if response_hosts.status_code == 200:
+            try:
+                hosts_json = response_hosts.json()
+                if isinstance(hosts_json, list) and len(hosts_json) > 0:
+                    host_list = hosts_json[0].get('hosts', {}).get('list', [])
+                elif isinstance(hosts_json, dict):
+                    host_list = hosts_json.get('hosts', {}).get('list', [])
+                else:
+                    host_list = []
+                active_devices = sum(1 for device in host_list if device.get('active') == 1)
+                total_known = len(host_list)
+            except Exception as e:
+                print(f"⚠️ Erreur parsing Hosts: {e}")
 
         history = update_history_with_current(curr_rx, curr_tx)
 
@@ -486,12 +612,15 @@ def api_stats():
         avg_speed = total_down / days_elapsed if days_elapsed > 0 else 1
         eta_days = (target_bytes - total_down) / avg_speed if avg_speed > 0 else 0
 
+        # Real-time speed calculation from byte difference
+        spd_dn, spd_up = calculate_speed(curr_rx, curr_tx, api_speed_state, api_speed_lock)
+
         return jsonify({
             "speed": {
-                "down": human_speed(rx_stats.get('bandwidth', 0)),
-                "up": human_speed(tx_stats.get('bandwidth', 0)),
-                "down_raw": rx_stats.get('bandwidth', 0),
-                "up_raw": tx_stats.get('bandwidth', 0),
+                "down": human_speed(spd_dn),
+                "up": human_speed(spd_up),
+                "down_raw": spd_dn,
+                "up_raw": spd_up,
             },
             "line_specs": {
                 "max_down": human_speed(rx_stats.get('maxBandwidth', 0)),
