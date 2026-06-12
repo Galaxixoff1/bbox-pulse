@@ -598,14 +598,43 @@ async function fetchHistory() {
     }
 }
 
+async function preloadHistory() {
+    try {
+        const res = await fetch('/api/history?timeframe=live');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.labels && data.labels.length > 0) {
+            historyData.labels = data.labels;
+            historyData.speedDown = data.speed_down;
+            historyData.speedUp = data.speed_up;
+            historyData.netActive = data.active_devices;
+            historyData.netKnown = data.known_devices;
+            
+            // Fill other arrays with 0s for graph compatibility
+            historyData.sessionDown = new Array(data.labels.length).fill(0);
+            historyData.sessionUp = new Array(data.labels.length).fill(0);
+            historyData.hwRx = new Array(data.labels.length).fill(0);
+            historyData.hwTx = new Array(data.labels.length).fill(0);
+            
+            updateCharts();
+        }
+    } catch (e) {
+        console.error('Failed to preload history:', e);
+    }
+}
+
 // ─── Init ────────────────────────────────────────
 
 // Load config page if we're on it
 loadConfigPage();
 
-// Start polling
-fetchStats();
-refreshInterval = setInterval(fetchStats, REFRESH_MS);
+// Preload historical data first, then start stats polling
+(async () => {
+    await preloadHistory();
+    await fetchStats();
+    refreshInterval = setInterval(fetchStats, REFRESH_MS);
+})();
 
 // Auto-refresh historical charts (60s)
 if (document.getElementById('chart-hist-speed')) {
@@ -615,3 +644,4 @@ if (document.getElementById('chart-hist-speed')) {
         }
     }, 60000);
 }
+

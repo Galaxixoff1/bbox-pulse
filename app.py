@@ -104,47 +104,40 @@ def human_speed(kbps):
         return f"{val:.0f} Kb/s"
     return "0 Kb/s"
 
-# State tracking for real-time speed calculation (separate for API and Monitor)
-api_speed_state = {
+# Unified global state for real-time speed calculation
+global_speed_state = {
     "rx": 0,
     "tx": 0,
     "time": 0.0,
     "speed_down": 0.0,
     "speed_up": 0.0
 }
-api_speed_lock = threading.Lock()
+global_speed_lock = threading.Lock()
 
-monitor_speed_state = {
-    "rx": 0,
-    "tx": 0,
-    "time": 0.0,
-    "speed_down": 0.0,
-    "speed_up": 0.0
-}
-monitor_speed_lock = threading.Lock()
-
-def calculate_speed(curr_rx, curr_tx, state_dict, lock):
-    """Calculate speed in Kbps based on delta bytes and delta time."""
+def update_and_get_speed(curr_rx, curr_tx):
+    """Update global speed counters and calculate speed in Kbps based on delta bytes and delta time."""
+    global global_speed_state
     now = time.time()
-    with lock:
-        if state_dict["time"] == 0 or state_dict["rx"] == 0:
-            state_dict["rx"] = curr_rx
-            state_dict["tx"] = curr_tx
-            state_dict["time"] = now
+    with global_speed_lock:
+        if global_speed_state["time"] == 0 or global_speed_state["rx"] == 0:
+            global_speed_state["rx"] = curr_rx
+            global_speed_state["tx"] = curr_tx
+            global_speed_state["time"] = now
             return 0.0, 0.0
         
-        dt = now - state_dict["time"]
+        dt = now - global_speed_state["time"]
+        # Limit speed updates to reasonable intervals to avoid division by zero or jitter
         if dt < 0.5:
-            return state_dict["speed_down"], state_dict["speed_up"]
+            return global_speed_state["speed_down"], global_speed_state["speed_up"]
             
-        delta_rx = curr_rx - state_dict["rx"]
-        delta_tx = curr_tx - state_dict["tx"]
+        delta_rx = curr_rx - global_speed_state["rx"]
+        delta_tx = curr_tx - global_speed_state["tx"]
         
         # If box restarted or bytes wrapped
         if delta_rx < 0 or delta_tx < 0:
-            state_dict["rx"] = curr_rx
-            state_dict["tx"] = curr_tx
-            state_dict["time"] = now
+            global_speed_state["rx"] = curr_rx
+            global_speed_state["tx"] = curr_tx
+            global_speed_state["time"] = now
             return 0.0, 0.0
             
         # Speed in Kbps (kilobits per second)
@@ -154,15 +147,16 @@ def calculate_speed(curr_rx, curr_tx, state_dict, lock):
         
         # Protect against anomalous huge spikes
         if speed_down > 10000000 or speed_up > 10000000:
-            return state_dict["speed_down"], state_dict["speed_up"]
+            return global_speed_state["speed_down"], global_speed_state["speed_up"]
             
-        state_dict["rx"] = curr_rx
-        state_dict["tx"] = curr_tx
-        state_dict["time"] = now
-        state_dict["speed_down"] = speed_down
-        state_dict["speed_up"] = speed_up
+        global_speed_state["rx"] = curr_rx
+        global_speed_state["tx"] = curr_tx
+        global_speed_state["time"] = now
+        global_speed_state["speed_down"] = speed_down
+        global_speed_state["speed_up"] = speed_up
         
         return speed_down, speed_up
+
 
 
 def human_eta(days):
@@ -419,8 +413,8 @@ def background_monitor():
                 except Exception:
                     active_dev, known_dev = 0, 0
 
-                spd_dn, spd_up = calculate_speed(curr_rx, curr_tx, monitor_speed_state, monitor_speed_lock)
-                record_timeseries(spd_dn, spd_up, active_dev, known_dev)
+                spd_dn, spd_up = update_and_get_speed(curr_rx, curr_tx)
+                record_timeseries(spd_dn / 1000, spd_up / 1000, active_dev, known_dev)
             elif resp.status_code in (401, 403):
                 print("⚠️ Session expirée, reconnexion...")
                 login_bbox()
@@ -613,7 +607,7 @@ def api_stats():
         eta_days = (target_bytes - total_down) / avg_speed if avg_speed > 0 else 0
 
         # Real-time speed calculation from byte difference
-        spd_dn, spd_up = calculate_speed(curr_rx, curr_tx, api_speed_state, api_speed_lock)
+        spd_dn, spd_up = update_and_get_speed(curr_rx, curr_tx)
 
         return jsonify({
             "speed": {
