@@ -5,3 +5,6 @@ __pycache__/
 bbox_history.json
 bbox_timeseries.json
 data/
+git_helper.txt
+
+

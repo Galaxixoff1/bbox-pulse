@@ -53,9 +53,9 @@ Ce projet interagit avec l'API locale officielle de la Bbox. Il a été validé 
 
 ---
 
-## 🚀 Déploiement Rapide
+## 🚀 Déploiement Rapide & Assistant de Gestion
 
-Le moyen le plus simple et rapide d'installer BboxPulse est d'utiliser le script d'installation interactif fourni. Il se charge de vérifier/installer Docker et Docker Compose, de configurer votre mot de passe Bbox de façon sécurisée et de lancer l'application.
+Le moyen le plus simple et rapide d'installer, configurer et maintenir BboxPulse est d'utiliser le script d'assistant interactif fourni (`setup.sh`).
 
 ```bash
 git clone https://github.com/Galaxixoff1/bbox-pulse.git
@@ -63,6 +63,15 @@ cd bbox-pulse
 chmod +x setup.sh
 ./setup.sh
 ```
+
+### 🛠️ Fonctionnalités du script d'assistant
+Le script `./setup.sh` peut être relancé **à tout moment** et propose un menu complet :
+1. **Installer / Démarrer** : Vérifie/installe Docker et Docker Compose, configure vos identifiants au premier lancement, puis lance l'application.
+2. **Modifier la configuration (.env)** : Modifiez une variable spécifique du fichier `.env` (ex: changer le mot de passe Bbox ou le port d'écoute) individuellement sans écraser ni réinitialiser le reste. Le script propose ensuite de redémarrer le conteneur pour appliquer.
+3. **Mettre à jour BboxPulse** : Pull automatiquement le dépôt Git et reconstruit/redémarre les conteneurs.
+4. **Planifier le redémarrage automatique (Cron)** : Configure une tâche Cron système pour planifier le redémarrage automatique du conteneur `bbox-pulse` toutes les X minutes. *Très utile si la connexion avec l'API locale de votre Bbox se fige et nécessite de relancer le conteneur.*
+5. **Réparer / Reconstruire** : Force la reconstruction complète et propre des conteneurs sans cache.
+6. **Désinstaller l'application** : Arrête les conteneurs, supprime les volumes de données Docker, supprime la tâche Cron et propose de nettoyer le fichier `.env`.
 
 ---
 
