@@ -29,6 +29,9 @@ const els = {
     progressPercent: $('progress-percent'),
     progressFill: $('progress-fill'),
     target: $('target'),
+    speedAvg: $('speed-avg'),
+    peakDown: $('peak-down'),
+    peakUp: $('peak-up'),
     etaAvg: $('eta-avg'),
     totalDown: $('total-down'),
     totalUp: $('total-up'),
@@ -190,6 +193,8 @@ async function fetchStats() {
         setValue(els.speedUp, d.speed.up);
         setGauge(els.gaugeDown, d.speed.down_raw);
         setGauge(els.gaugeUp, d.speed.up_raw);
+        if (d.speed.peak_down) setValue(els.peakDown, d.speed.peak_down);
+        if (d.speed.peak_up) setValue(els.peakUp, d.speed.peak_up);
 
         // Session
         setValue(els.sessionDown, d.session.down);
@@ -235,6 +240,7 @@ async function fetchStats() {
         setValue(els.progressPercent, d.objective.progress + '%');
         if (els.progressFill) els.progressFill.style.width = d.objective.progress + '%';
         if (els.target) els.target.textContent = 'Objectif : ' + d.objective.target;
+        setValue(els.speedAvg, d.objective.speed_avg || '—');
         setValue(els.etaAvg, d.objective.eta_avg);
 
         // Total
