@@ -72,6 +72,7 @@ except Exception as e:
 REDIS_HISTORY_KEY = "bboxpulse:history"
 REDIS_TIMESERIES_KEY = "bboxpulse:timeseries"
 REDIS_CONFIG_KEY = "bboxpulse:config"
+REDIS_SPEED_KEY = "bboxpulse:speed_state"
 REDIS_TIMESERIES_MAX = 10080  # 7 days @ 1 min
 
 # ─── Helpers ────────────────────────────────────────────────
@@ -104,57 +105,108 @@ def human_speed(kbps):
         return f"{val:.0f} Kb/s"
     return "0 Kb/s"
 
-# Unified global state for real-time speed calculation
-global_speed_state = {
-    "rx": 0,
-    "tx": 0,
-    "time": 0.0,
-    "speed_down": 0.0,
-    "speed_up": 0.0
-}
+# Unified speed state stored in Redis / JSON with thread safety
+SPEED_FILE = os.path.join(DATA_DIR, 'bbox_speed_state.json')
 global_speed_lock = threading.Lock()
 
+def load_speed_state():
+    default = {"rx": 0, "tx": 0, "time": 0.0, "speed_down": 0.0, "speed_up": 0.0}
+    if redis_client:
+        try:
+            data = redis_client.hgetall(REDIS_SPEED_KEY)
+            if data:
+                return {
+                    "rx": int(data.get("rx", 0)),
+                    "tx": int(data.get("tx", 0)),
+                    "time": float(data.get("time", 0.0)),
+                    "speed_down": float(data.get("speed_down", 0.0)),
+                    "speed_up": float(data.get("speed_up", 0.0)),
+                }
+        except Exception as e:
+            print(f"⚠️ Redis speed read error: {e}")
+
+    if os.path.exists(SPEED_FILE):
+        try:
+            with open(SPEED_FILE, 'r') as f:
+                data = json.load(f)
+                for key in default:
+                    if key not in data:
+                        data[key] = default[key]
+                return data
+        except Exception:
+            return default
+    return default
+
+def save_speed_state(state):
+    if redis_client:
+        try:
+            redis_client.hset(REDIS_SPEED_KEY, mapping={
+                "rx": str(state["rx"]),
+                "tx": str(state["tx"]),
+                "time": str(state["time"]),
+                "speed_down": str(state["speed_down"]),
+                "speed_up": str(state["speed_up"]),
+            })
+        except Exception as e:
+            print(f"⚠️ Redis speed write error: {e}")
+
+    try:
+        os.makedirs(os.path.dirname(SPEED_FILE) or '.', exist_ok=True)
+        with open(SPEED_FILE, 'w') as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"⚠️ JSON speed write error: {e}")
+
 def update_and_get_speed(curr_rx, curr_tx):
-    """Update global speed counters and calculate speed in Kbps based on delta bytes and delta time."""
-    global global_speed_state
+    """Update speed counters and calculate speed in Kbps based on delta bytes and delta time."""
     now = time.time()
     with global_speed_lock:
-        if global_speed_state["time"] == 0 or global_speed_state["rx"] == 0:
-            global_speed_state["rx"] = curr_rx
-            global_speed_state["tx"] = curr_tx
-            global_speed_state["time"] = now
+        speed_state = load_speed_state()
+        if speed_state["time"] == 0 or speed_state["rx"] == 0:
+            speed_state["rx"] = curr_rx
+            speed_state["tx"] = curr_tx
+            speed_state["time"] = now
+            speed_state["speed_down"] = 0.0
+            speed_state["speed_up"] = 0.0
+            save_speed_state(speed_state)
             return 0.0, 0.0
-        
-        dt = now - global_speed_state["time"]
-        # Limit speed updates to reasonable intervals to avoid division by zero or jitter
+
+        dt = now - speed_state["time"]
         if dt < 0.5:
-            return global_speed_state["speed_down"], global_speed_state["speed_up"]
-            
-        delta_rx = curr_rx - global_speed_state["rx"]
-        delta_tx = curr_tx - global_speed_state["tx"]
-        
+            return speed_state["speed_down"], speed_state["speed_up"]
+
+        delta_rx = curr_rx - speed_state["rx"]
+        delta_tx = curr_tx - speed_state["tx"]
+
         # If box restarted or bytes wrapped
         if delta_rx < 0 or delta_tx < 0:
-            global_speed_state["rx"] = curr_rx
-            global_speed_state["tx"] = curr_tx
-            global_speed_state["time"] = now
+            speed_state["rx"] = curr_rx
+            speed_state["tx"] = curr_tx
+            speed_state["time"] = now
+            speed_state["speed_down"] = 0.0
+            speed_state["speed_up"] = 0.0
+            save_speed_state(speed_state)
             return 0.0, 0.0
-            
-        # Speed in Kbps (kilobits per second)
-        # bytes * 8 = bits. bits / dt / 1000 = Kbps.
+
+        # If box counters haven't refreshed yet (delta == 0) within a short window (< 15s),
+        # hold the previous positive speed measurement rather than flickering immediately to 0 Kb/s
+        if delta_rx == 0 and delta_tx == 0 and dt < 15.0 and (speed_state["speed_down"] > 0 or speed_state["speed_up"] > 0):
+            return speed_state["speed_down"], speed_state["speed_up"]
+
         speed_down = (delta_rx * 8) / (dt * 1000)
         speed_up = (delta_tx * 8) / (dt * 1000)
-        
+
         # Protect against anomalous huge spikes
         if speed_down > 10000000 or speed_up > 10000000:
-            return global_speed_state["speed_down"], global_speed_state["speed_up"]
-            
-        global_speed_state["rx"] = curr_rx
-        global_speed_state["tx"] = curr_tx
-        global_speed_state["time"] = now
-        global_speed_state["speed_down"] = speed_down
-        global_speed_state["speed_up"] = speed_up
-        
+            return speed_state["speed_down"], speed_state["speed_up"]
+
+        speed_state["rx"] = curr_rx
+        speed_state["tx"] = curr_tx
+        speed_state["time"] = now
+        speed_state["speed_down"] = speed_down
+        speed_state["speed_up"] = speed_up
+        save_speed_state(speed_state)
+
         return speed_down, speed_up
 
 
@@ -228,9 +280,14 @@ def update_history_with_current(curr_rx, curr_tx):
     with history_lock:
         history = load_data()
         if history['last_rx'] == 0:
+            if history['bank_rx'] == 0:
+                history['bank_rx'] = curr_rx
+                history['bank_tx'] = curr_tx
             history['last_rx'], history['last_tx'] = curr_rx, curr_tx
 
         if curr_rx < history['last_rx']:  # Reset de la box
+            history['bank_rx'] += curr_rx
+            history['bank_tx'] += curr_tx
             history['last_rx'], history['last_tx'] = curr_rx, curr_tx
         else:
             delta_rx = curr_rx - history['last_rx']
