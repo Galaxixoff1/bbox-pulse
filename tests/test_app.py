@@ -76,3 +76,23 @@ def test_speed_calculation_and_holding(tmp_data_dir):
     # Quick subsequent call with 0 delta (e.g. within 1 second) should hold previous non-zero speed
     spd_dn_hold, spd_up_hold = bbox_app.update_and_get_speed(2000000, 1000000)
     assert spd_dn_hold == recorded_speed_dn
+
+def test_peak_speed_tracking(tmp_data_dir):
+    # Initialize speed baseline
+    bbox_app.update_and_get_speed(1000000, 500000)
+
+    time.sleep(0.6)
+    spd_dn1, spd_up1 = bbox_app.update_and_get_speed(5000000, 2000000)
+
+    state = bbox_app.load_speed_state()
+    assert state['peak_down'] == spd_dn1
+    assert state['peak_up'] == spd_up1
+
+    # Lower speed should not decrease recorded peak speed
+    time.sleep(0.6)
+    spd_dn2, spd_up2 = bbox_app.update_and_get_speed(5100000, 2050000)
+    assert spd_dn2 < spd_dn1
+
+    state_after = bbox_app.load_speed_state()
+    assert state_after['peak_down'] == spd_dn1
+    assert state_after['peak_up'] == spd_up1

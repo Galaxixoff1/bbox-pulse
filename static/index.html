@@ -60,6 +60,16 @@
                         <div class="speed-gauge"><div class="speed-gauge-fill violet" id="gauge-up" style="width:0%"></div></div>
                     </div>
                 </div>
+                <div class="card-row" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-primary);">
+                    <div class="metric">
+                        <div class="metric-label">Pic Max DL</div>
+                        <div class="metric-value blue" id="peak-down" style="font-size: 16px;">—</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Pic Max UL</div>
+                        <div class="metric-value violet" id="peak-up" style="font-size: 16px;">—</div>
+                    </div>
+                </div>
                 <div class="chart-container chart-sm">
                     <canvas id="chart-speed"></canvas>
                 </div>
@@ -197,6 +207,10 @@
                     <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
                 </div>
                 <div class="eta-row">
+                    <div class="eta-item">
+                        <div class="eta-label">Vitesse Moyenne</div>
+                        <div class="eta-value blue" id="speed-avg">—</div>
+                    </div>
                     <div class="eta-item">
                         <div class="eta-label">ETA Estimée</div>
                         <div class="eta-value" id="eta-avg">—</div>

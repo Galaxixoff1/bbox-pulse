@@ -110,7 +110,7 @@ SPEED_FILE = os.path.join(DATA_DIR, 'bbox_speed_state.json')
 global_speed_lock = threading.Lock()
 
 def load_speed_state():
-    default = {"rx": 0, "tx": 0, "time": 0.0, "speed_down": 0.0, "speed_up": 0.0}
+    default = {"rx": 0, "tx": 0, "time": 0.0, "speed_down": 0.0, "speed_up": 0.0, "peak_down": 0.0, "peak_up": 0.0}
     if redis_client:
         try:
             data = redis_client.hgetall(REDIS_SPEED_KEY)
@@ -121,6 +121,8 @@ def load_speed_state():
                     "time": float(data.get("time", 0.0)),
                     "speed_down": float(data.get("speed_down", 0.0)),
                     "speed_up": float(data.get("speed_up", 0.0)),
+                    "peak_down": float(data.get("peak_down", 0.0)),
+                    "peak_up": float(data.get("peak_up", 0.0)),
                 }
         except Exception as e:
             print(f"⚠️ Redis speed read error: {e}")
@@ -146,6 +148,8 @@ def save_speed_state(state):
                 "time": str(state["time"]),
                 "speed_down": str(state["speed_down"]),
                 "speed_up": str(state["speed_up"]),
+                "peak_down": str(state.get("peak_down", 0.0)),
+                "peak_up": str(state.get("peak_up", 0.0)),
             })
         except Exception as e:
             print(f"⚠️ Redis speed write error: {e}")
@@ -205,6 +209,11 @@ def update_and_get_speed(curr_rx, curr_tx):
         speed_state["time"] = now
         speed_state["speed_down"] = speed_down
         speed_state["speed_up"] = speed_up
+        if speed_down > speed_state.get("peak_down", 0.0):
+            speed_state["peak_down"] = speed_down
+        if speed_up > speed_state.get("peak_up", 0.0):
+            speed_state["peak_up"] = speed_up
+
         save_speed_state(speed_state)
 
         return speed_down, speed_up
@@ -652,7 +661,7 @@ def api_stats():
         target_bytes = computed_target * (1024**4)
         progress = min((total_down / target_bytes) * 100, 100)
 
-        # ETA
+        # ETA & Average Speed Calculation
         try:
             uptime_date_str = config.get("uptime_start_date", UPTIME_START.strftime('%Y-%m-%d'))
             uptime_start = datetime.strptime(uptime_date_str, '%Y-%m-%d')
@@ -663,8 +672,14 @@ def api_stats():
         avg_speed = total_down / days_elapsed if days_elapsed > 0 else 1
         eta_days = (target_bytes - total_down) / avg_speed if avg_speed > 0 else 0
 
+        # Convert avg_speed (bytes/day) to Kbps: (total_down * 8) / (seconds * 1000)
+        avg_speed_kbps = (total_down * 8) / (days_elapsed * 86400 * 1000) if days_elapsed > 0 else 0.0
+
         # Real-time speed calculation from byte difference
         spd_dn, spd_up = update_and_get_speed(curr_rx, curr_tx)
+        speed_state = load_speed_state()
+        peak_dn = speed_state.get("peak_down", 0.0)
+        peak_up = speed_state.get("peak_up", 0.0)
 
         return jsonify({
             "speed": {
@@ -672,6 +687,10 @@ def api_stats():
                 "up": human_speed(spd_up),
                 "down_raw": spd_dn,
                 "up_raw": spd_up,
+                "peak_down": human_speed(peak_dn),
+                "peak_up": human_speed(peak_up),
+                "peak_down_raw": peak_dn,
+                "peak_up_raw": peak_up,
             },
             "line_specs": {
                 "max_down": human_speed(rx_stats.get('maxBandwidth', 0)),
@@ -699,7 +718,9 @@ def api_stats():
             "objective": {
                 "target": f"{computed_target:.0f} To",
                 "progress": round(progress, 2),
-                "eta_avg": human_eta(eta_days)
+                "eta_avg": human_eta(eta_days),
+                "speed_avg": human_speed(avg_speed_kbps),
+                "speed_avg_raw": avg_speed_kbps,
             },
             "total": {
                 "down": human_bytes(history['bank_rx']),
