@@ -159,17 +159,44 @@ def save_speed_state(state):
     except Exception as e:
         print(f"⚠️ JSON speed write error: {e}")
 
-def update_and_get_speed(rx_bandwidth_kbps, tx_bandwidth_kbps):
-    """Update speed state with direct bandwidth values in kbps from Bbox API and update peaks."""
+def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
+    """Compute high precision differential speed in kbps based on byte counters and timestamp delta."""
     now = time.time()
+    try:
+        curr_rx = int(curr_rx_bytes)
+    except (ValueError, TypeError):
+        curr_rx = 0
+
+    try:
+        curr_tx = int(curr_tx_bytes)
+    except (ValueError, TypeError):
+        curr_tx = 0
+
     with global_speed_lock:
         speed_state = load_speed_state()
-        speed_down = float(rx_bandwidth_kbps)
-        speed_up = float(tx_bandwidth_kbps)
+        last_rx = speed_state.get("rx", 0)
+        last_tx = speed_state.get("tx", 0)
+        last_time = speed_state.get("time", 0.0)
 
+        t_diff = now - last_time
+
+        # Security checks: box reboot (curr < last), t_diff <= 0, or initial sample
+        if t_diff <= 0 or curr_rx < last_rx or curr_tx < last_tx or last_time == 0 or last_rx == 0:
+            speed_down = 0.0
+            speed_up = 0.0
+        else:
+            rx_bps = ((curr_rx - last_rx) * 8) / t_diff
+            tx_bps = ((curr_tx - last_tx) * 8) / t_diff
+            # Convert bps to kbps for internal consistency
+            speed_down = rx_bps / 1000.0
+            speed_up = tx_bps / 1000.0
+
+        speed_state["rx"] = curr_rx
+        speed_state["tx"] = curr_tx
         speed_state["time"] = now
         speed_state["speed_down"] = speed_down
         speed_state["speed_up"] = speed_up
+
         if speed_down > speed_state.get("peak_down", 0.0):
             speed_state["peak_down"] = speed_down
         if speed_up > speed_state.get("peak_up", 0.0):
@@ -419,9 +446,6 @@ def background_monitor():
                 tx_stats = stats.get('tx', {})
                 curr_rx = int(rx_stats.get('bytes', 0))
                 curr_tx = int(tx_stats.get('bytes', 0))
-                rx_bandwidth = float(rx_stats.get('bandwidth', 0))
-                tx_bandwidth = float(tx_stats.get('bandwidth', 0))
-
                 update_history_with_current(curr_rx, curr_tx)
 
                 # Fetch devices count
@@ -442,7 +466,7 @@ def background_monitor():
                 except Exception:
                     active_dev, known_dev = 0, 0
 
-                spd_dn, spd_up = update_and_get_speed(rx_bandwidth, tx_bandwidth)
+                spd_dn, spd_up = update_and_get_speed(rx_stats.get('bytes', 0), tx_stats.get('bytes', 0))
                 record_timeseries(spd_dn / 1000, spd_up / 1000, active_dev, known_dev)
             elif resp.status_code in (401, 403):
                 print("⚠️ Session expirée, reconnexion...")
@@ -638,10 +662,8 @@ def api_stats():
         # Convert avg_speed (bytes/day) to Kbps: (total_down * 8) / (seconds * 1000)
         avg_speed_kbps = (total_down * 8) / (days_elapsed * 86400 * 1000) if days_elapsed > 0 else 0.0
 
-        # Real-time speed calculation from Bbox bandwidth (in kbps)
-        rx_bandwidth = float(rx_stats.get('bandwidth', 0))
-        tx_bandwidth = float(tx_stats.get('bandwidth', 0))
-        spd_dn, spd_up = update_and_get_speed(rx_bandwidth, tx_bandwidth)
+        # Real-time speed calculation from byte counters differential
+        spd_dn, spd_up = update_and_get_speed(rx_stats.get('bytes', 0), tx_stats.get('bytes', 0))
         speed_state = load_speed_state()
         peak_dn = speed_state.get("peak_down", 0.0)
         peak_up = speed_state.get("peak_up", 0.0)
