@@ -15,6 +15,9 @@ def tmp_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(bbox_app, "DATA_FILE", data_file)
     monkeypatch.setattr(bbox_app, "SPEED_FILE", speed_file)
     monkeypatch.setattr(bbox_app, "redis_client", None)  # force JSON fallback for deterministic test
+    bbox_app._last_rx = None
+    bbox_app._last_tx = None
+    bbox_app._last_time = None
     return data_dir
 
 def test_initial_history_accumulation(tmp_data_dir):

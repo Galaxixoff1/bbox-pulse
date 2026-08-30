@@ -72,7 +72,7 @@ except Exception as e:
 REDIS_HISTORY_KEY = "bboxpulse:history"
 REDIS_TIMESERIES_KEY = "bboxpulse:timeseries"
 REDIS_CONFIG_KEY = "bboxpulse:config"
-REDIS_SPEED_KEY = "bboxpulse:speed_state"
+REDIS_SPEED_KEY = "bboxpulse:speed_state_v2"
 REDIS_TIMESERIES_MAX = 10080  # 7 days @ 1 min
 
 # ─── Helpers ────────────────────────────────────────────────
@@ -104,7 +104,7 @@ def human_speed(kbps):
     return "0 Mb/s"
 
 # Unified speed state stored in Redis / JSON with thread safety
-SPEED_FILE = os.path.join(DATA_DIR, 'bbox_speed_state.json')
+SPEED_FILE = os.path.join(DATA_DIR, 'bbox_speed_state_v2.json')
 global_speed_lock = threading.Lock()
 
 def load_speed_state():
@@ -159,8 +159,14 @@ def save_speed_state(state):
     except Exception as e:
         print(f"⚠️ JSON speed write error: {e}")
 
+_last_rx = None
+_last_tx = None
+_last_time = None
+
 def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
     """Compute high precision differential speed in kbps based on byte counters and timestamp delta."""
+    global _last_rx, _last_tx, _last_time
+
     now = time.time()
     try:
         curr_rx = int(curr_rx_bytes)
@@ -174,22 +180,40 @@ def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
 
     with global_speed_lock:
         speed_state = load_speed_state()
-        last_rx = speed_state.get("rx", 0)
-        last_tx = speed_state.get("tx", 0)
-        last_time = speed_state.get("time", 0.0)
 
-        t_diff = now - last_time
+        # 1. Initialisation au 1er appel
+        if _last_rx is None or _last_time is None:
+            _last_rx = curr_rx
+            _last_tx = curr_tx
+            _last_time = now
+            return 0.0, 0.0
 
-        # Security checks: box reboot (curr < last), t_diff <= 0, or initial sample
-        if t_diff <= 0 or curr_rx < last_rx or curr_tx < last_tx or last_time == 0 or last_rx == 0:
-            speed_down = 0.0
-            speed_up = 0.0
-        else:
-            rx_bps = ((curr_rx - last_rx) * 8) / t_diff
-            tx_bps = ((curr_tx - last_tx) * 8) / t_diff
-            # Convert bps to kbps for internal consistency
-            speed_down = rx_bps / 1000.0
-            speed_up = tx_bps / 1000.0
+        t_diff = now - _last_time
+        if t_diff <= 0:
+            return 0.0, 0.0
+
+        # 2. Calcul du delta en octets
+        delta_rx = curr_rx - _last_rx
+        delta_tx = curr_tx - _last_tx
+
+        # Gestion reboot box (compteur qui retombe)
+        if delta_rx < 0 or delta_tx < 0:
+            _last_rx = curr_rx
+            _last_tx = curr_tx
+            _last_time = now
+            return 0.0, 0.0
+
+        # 3. Débit réel
+        rx_bps = (delta_rx * 8) / t_diff
+        tx_bps = (delta_tx * 8) / t_diff
+
+        speed_down = rx_bps / 1000.0
+        speed_up = tx_bps / 1000.0
+
+        # 4. Mise à jour des références
+        _last_rx = curr_rx
+        _last_tx = curr_tx
+        _last_time = now
 
         speed_state["rx"] = curr_rx
         speed_state["tx"] = curr_tx
@@ -197,6 +221,7 @@ def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
         speed_state["speed_down"] = speed_down
         speed_state["speed_up"] = speed_up
 
+        # 5. Calcul des pics UNIQUEMENT APRÈS la première mesure valide
         if speed_down > speed_state.get("peak_down", 0.0):
             speed_state["peak_down"] = speed_down
         if speed_up > speed_state.get("peak_up", 0.0):
