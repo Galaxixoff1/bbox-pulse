@@ -99,11 +99,9 @@ def human_speed(kbps):
     val = float(kbps)
     if val >= 1000000:
         return f"{val/1000000:.2f} Gb/s"
-    if val >= 1000:
+    elif val > 0:
         return f"{val/1000:.1f} Mb/s"
-    if val >= 1:
-        return f"{val:.0f} Kb/s"
-    return "0 Kb/s"
+    return "0 Mb/s"
 
 # Unified speed state stored in Redis / JSON with thread safety
 SPEED_FILE = os.path.join(DATA_DIR, 'bbox_speed_state.json')
@@ -161,51 +159,14 @@ def save_speed_state(state):
     except Exception as e:
         print(f"⚠️ JSON speed write error: {e}")
 
-def update_and_get_speed(curr_rx, curr_tx):
-    """Update speed counters and calculate speed in Kbps based on delta bytes and delta time."""
+def update_and_get_speed(rx_bandwidth_kbps, tx_bandwidth_kbps):
+    """Update speed state with direct bandwidth values in kbps from Bbox API and update peaks."""
     now = time.time()
     with global_speed_lock:
         speed_state = load_speed_state()
-        if speed_state["time"] == 0 or speed_state["rx"] == 0:
-            speed_state["rx"] = curr_rx
-            speed_state["tx"] = curr_tx
-            speed_state["time"] = now
-            speed_state["speed_down"] = 0.0
-            speed_state["speed_up"] = 0.0
-            save_speed_state(speed_state)
-            return 0.0, 0.0
+        speed_down = float(rx_bandwidth_kbps)
+        speed_up = float(tx_bandwidth_kbps)
 
-        dt = now - speed_state["time"]
-        if dt < 0.5:
-            return speed_state["speed_down"], speed_state["speed_up"]
-
-        delta_rx = curr_rx - speed_state["rx"]
-        delta_tx = curr_tx - speed_state["tx"]
-
-        # If box restarted or bytes wrapped
-        if delta_rx < 0 or delta_tx < 0:
-            speed_state["rx"] = curr_rx
-            speed_state["tx"] = curr_tx
-            speed_state["time"] = now
-            speed_state["speed_down"] = 0.0
-            speed_state["speed_up"] = 0.0
-            save_speed_state(speed_state)
-            return 0.0, 0.0
-
-        # If box counters haven't refreshed yet (delta == 0) within a short window (< 15s),
-        # hold the previous positive speed measurement rather than flickering immediately to 0 Kb/s
-        if delta_rx == 0 and delta_tx == 0 and dt < 15.0 and (speed_state["speed_down"] > 0 or speed_state["speed_up"] > 0):
-            return speed_state["speed_down"], speed_state["speed_up"]
-
-        speed_down = (delta_rx * 8) / (dt * 1000)
-        speed_up = (delta_tx * 8) / (dt * 1000)
-
-        # Protect against anomalous huge spikes
-        if speed_down > 10000000 or speed_up > 10000000:
-            return speed_state["speed_down"], speed_state["speed_up"]
-
-        speed_state["rx"] = curr_rx
-        speed_state["tx"] = curr_tx
         speed_state["time"] = now
         speed_state["speed_down"] = speed_down
         speed_state["speed_up"] = speed_up
@@ -458,6 +419,8 @@ def background_monitor():
                 tx_stats = stats.get('tx', {})
                 curr_rx = int(rx_stats.get('bytes', 0))
                 curr_tx = int(tx_stats.get('bytes', 0))
+                rx_bandwidth = float(rx_stats.get('bandwidth', 0))
+                tx_bandwidth = float(tx_stats.get('bandwidth', 0))
 
                 update_history_with_current(curr_rx, curr_tx)
 
@@ -479,7 +442,7 @@ def background_monitor():
                 except Exception:
                     active_dev, known_dev = 0, 0
 
-                spd_dn, spd_up = update_and_get_speed(curr_rx, curr_tx)
+                spd_dn, spd_up = update_and_get_speed(rx_bandwidth, tx_bandwidth)
                 record_timeseries(spd_dn / 1000, spd_up / 1000, active_dev, known_dev)
             elif resp.status_code in (401, 403):
                 print("⚠️ Session expirée, reconnexion...")
@@ -675,8 +638,10 @@ def api_stats():
         # Convert avg_speed (bytes/day) to Kbps: (total_down * 8) / (seconds * 1000)
         avg_speed_kbps = (total_down * 8) / (days_elapsed * 86400 * 1000) if days_elapsed > 0 else 0.0
 
-        # Real-time speed calculation from byte difference
-        spd_dn, spd_up = update_and_get_speed(curr_rx, curr_tx)
+        # Real-time speed calculation from Bbox bandwidth (in kbps)
+        rx_bandwidth = float(rx_stats.get('bandwidth', 0))
+        tx_bandwidth = float(tx_stats.get('bandwidth', 0))
+        spd_dn, spd_up = update_and_get_speed(rx_bandwidth, tx_bandwidth)
         speed_state = load_speed_state()
         peak_dn = speed_state.get("peak_down", 0.0)
         peak_up = speed_state.get("peak_up", 0.0)

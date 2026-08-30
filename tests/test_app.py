@@ -59,40 +59,29 @@ def test_box_reset_handling(tmp_data_dir):
     assert history['last_rx'] == new_rx
     assert history['last_tx'] == new_tx
 
-def test_speed_calculation_and_holding(tmp_data_dir):
-    # Initial call sets baseline
-    spd_dn, spd_up = bbox_app.update_and_get_speed(1000000, 500000)
-    assert spd_dn == 0.0
-    assert spd_up == 0.0
+def test_speed_calculation_direct_bandwidth(tmp_data_dir):
+    # Test direct bandwidth reading in kbps
+    spd_dn, spd_up = bbox_app.update_and_get_speed(951200, 120400)
+    assert spd_dn == 951200.0
+    assert spd_up == 120400.0
 
-    # Wait 1s and download 1MB (8,000,000 bits)
-    time.sleep(1.0)
-    spd_dn, spd_up = bbox_app.update_and_get_speed(2000000, 1000000)
-    assert spd_dn > 0.0
-    assert spd_up > 0.0
-
-    recorded_speed_dn = spd_dn
-
-    # Quick subsequent call with 0 delta (e.g. within 1 second) should hold previous non-zero speed
-    spd_dn_hold, spd_up_hold = bbox_app.update_and_get_speed(2000000, 1000000)
-    assert spd_dn_hold == recorded_speed_dn
+    # Test human_speed formatting rules (< 1,000,000 kbps is Mb/s, >= 1,000,000 kbps is Gb/s)
+    assert bbox_app.human_speed(951200) == "951.2 Mb/s"
+    assert bbox_app.human_speed(1050000) == "1.05 Gb/s"
+    assert bbox_app.human_speed(0) == "0 Mb/s"
 
 def test_peak_speed_tracking(tmp_data_dir):
-    # Initialize speed baseline
-    bbox_app.update_and_get_speed(1000000, 500000)
+    # Initialize speed baseline with bandwidth values in kbps
+    bbox_app.update_and_get_speed(500000, 200000)
 
-    time.sleep(0.6)
+    # Higher bandwidth updates peak
     spd_dn1, spd_up1 = bbox_app.update_and_get_speed(5000000, 2000000)
-
     state = bbox_app.load_speed_state()
-    assert state['peak_down'] == spd_dn1
-    assert state['peak_up'] == spd_up1
+    assert state['peak_down'] == 5000000.0
+    assert state['peak_up'] == 2000000.0
 
-    # Lower speed should not decrease recorded peak speed
-    time.sleep(0.6)
-    spd_dn2, spd_up2 = bbox_app.update_and_get_speed(5100000, 2050000)
-    assert spd_dn2 < spd_dn1
-
+    # Lower bandwidth should not decrease recorded peak speed
+    spd_dn2, spd_up2 = bbox_app.update_and_get_speed(3000000, 1000000)
     state_after = bbox_app.load_speed_state()
-    assert state_after['peak_down'] == spd_dn1
-    assert state_after['peak_up'] == spd_up1
+    assert state_after['peak_down'] == 5000000.0
+    assert state_after['peak_up'] == 2000000.0
