@@ -15,9 +15,6 @@ def tmp_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(bbox_app, "DATA_FILE", data_file)
     monkeypatch.setattr(bbox_app, "SPEED_FILE", speed_file)
     monkeypatch.setattr(bbox_app, "redis_client", None)  # force JSON fallback for deterministic test
-    bbox_app._last_rx = None
-    bbox_app._last_tx = None
-    bbox_app._last_time = None
     return data_dir
 
 def test_initial_history_accumulation(tmp_data_dir):
@@ -78,11 +75,11 @@ def test_differential_speed_calculation_and_string_bigint(tmp_data_dir, monkeypa
     assert spd_dn == 0.0
     assert spd_up == 0.0
 
-    # Advance time by 1.0 second
-    # Add 125,000,000 bytes (1 Gbps = 1,000,000,000 bits/s = 125 MB/s)
-    current_time = 1001.0
-    next_rx_str = str(290847669344 + 125000000)
-    next_tx_str = str(10000000000 + 12500000)  # 100 Mbps = 12.5 MB/s
+    # Advance time by 2.0 seconds to pass the t_diff >= 2.0 threshold
+    # Add 250,000,000 bytes (1 Gbps = 1,000,000,000 bits/s = 125 MB/s * 2 = 250 MB)
+    current_time = 1002.0
+    next_rx_str = str(290847669344 + 250000000)
+    next_tx_str = str(10000000000 + 25000000)  # 100 Mbps = 12.5 MB/s * 2
 
     spd_dn, spd_up = bbox_app.update_and_get_speed(next_rx_str, next_tx_str)
     # 1 Gbps = 1,000,000 kbps
@@ -104,14 +101,14 @@ def test_speed_calculation_security_resets(tmp_data_dir, monkeypatch):
     # Seed baseline
     bbox_app.update_and_get_speed("100000000", "50000000")
 
-    # 1. Box reboot scenario: curr_rx < last_rx
-    current_time = 2001.0
+    # 1. Box reboot scenario: curr_rx < last_rx (advance time > 2.0)
+    current_time = 2003.0
     spd_dn, spd_up = bbox_app.update_and_get_speed("5000000", "1000000")
     assert spd_dn == 0.0
     assert spd_up == 0.0
 
-    # 2. Invalid t_diff (t_diff <= 0)
-    current_time = 2001.0  # same timestamp
+    # 2. Invalid t_diff (t_diff < 2.0) should return last known speed (which was 0.0 from reboot)
+    current_time = 2004.0
     spd_dn, spd_up = bbox_app.update_and_get_speed("10000000", "2000000")
     assert spd_dn == 0.0
     assert spd_up == 0.0
@@ -125,9 +122,9 @@ def test_peak_speed_tracking(tmp_data_dir, monkeypatch):
     bbox_app.update_and_get_speed("100000000", "50000000")
 
     # High speed sample (1 Gbps)
-    current_time = 3001.0
-    rx1 = str(100000000 + 125000000)
-    tx1 = str(50000000 + 12500000)
+    current_time = 3002.0
+    rx1 = str(100000000 + 250000000)
+    tx1 = str(50000000 + 25000000)
     bbox_app.update_and_get_speed(rx1, tx1)
 
     state = bbox_app.load_speed_state()
@@ -135,9 +132,9 @@ def test_peak_speed_tracking(tmp_data_dir, monkeypatch):
     assert pytest.approx(state['peak_up'], 0.01) == 100000.0
 
     # Lower speed sample should not lower peak
-    current_time = 3002.0
-    rx2 = str(int(rx1) + 12500000)  # 100 Mbps
-    tx2 = str(int(tx1) + 1250000)
+    current_time = 3004.0
+    rx2 = str(int(rx1) + 25000000)  # 100 Mbps over 2s
+    tx2 = str(int(tx1) + 2500000)
     bbox_app.update_and_get_speed(rx2, tx2)
 
     state_after = bbox_app.load_speed_state()

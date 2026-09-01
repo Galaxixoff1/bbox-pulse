@@ -109,11 +109,12 @@ global_speed_lock = threading.Lock()
 
 def load_speed_state():
     default = {"rx": 0, "tx": 0, "time": 0.0, "speed_down": 0.0, "speed_up": 0.0, "peak_down": 0.0, "peak_up": 0.0}
+    state = default.copy()
     if redis_client:
         try:
             data = redis_client.hgetall(REDIS_SPEED_KEY)
             if data:
-                return {
+                state.update({
                     "rx": int(data.get("rx", 0)),
                     "tx": int(data.get("tx", 0)),
                     "time": float(data.get("time", 0.0)),
@@ -121,21 +122,26 @@ def load_speed_state():
                     "speed_up": float(data.get("speed_up", 0.0)),
                     "peak_down": float(data.get("peak_down", 0.0)),
                     "peak_up": float(data.get("peak_up", 0.0)),
-                }
+                })
         except Exception as e:
             print(f"⚠️ Redis speed read error: {e}")
-
-    if os.path.exists(SPEED_FILE):
+    elif os.path.exists(SPEED_FILE):
         try:
             with open(SPEED_FILE, 'r') as f:
                 data = json.load(f)
                 for key in default:
-                    if key not in data:
-                        data[key] = default[key]
-                return data
+                    if key in data:
+                        state[key] = data[key]
         except Exception:
-            return default
-    return default
+            pass
+
+    # Reset impossible peaks (e.g., > 10 Gbps)
+    if state["peak_down"] > 10000000.0:
+        state["peak_down"] = 0.0
+    if state["peak_up"] > 10000000.0:
+        state["peak_up"] = 0.0
+
+    return state
 
 def save_speed_state(state):
     if redis_client:
@@ -159,14 +165,8 @@ def save_speed_state(state):
     except Exception as e:
         print(f"⚠️ JSON speed write error: {e}")
 
-_last_rx = None
-_last_tx = None
-_last_time = None
-
 def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
     """Compute high precision differential speed in kbps based on byte counters and timestamp delta."""
-    global _last_rx, _last_tx, _last_time
-
     now = time.time()
     try:
         curr_rx = int(curr_rx_bytes)
@@ -181,16 +181,23 @@ def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
     with global_speed_lock:
         speed_state = load_speed_state()
 
+        _last_rx = speed_state.get("rx", 0)
+        _last_tx = speed_state.get("tx", 0)
+        _last_time = speed_state.get("time", 0.0)
+
         # 1. Initialisation au 1er appel
-        if _last_rx is None or _last_time is None:
-            _last_rx = curr_rx
-            _last_tx = curr_tx
-            _last_time = now
+        if _last_time == 0.0:
+            speed_state["rx"] = curr_rx
+            speed_state["tx"] = curr_tx
+            speed_state["time"] = now
+            save_speed_state(speed_state)
             return 0.0, 0.0
 
         t_diff = now - _last_time
-        if t_diff <= 0:
-            return 0.0, 0.0
+
+        # Prevent impossible peaks and 0 Mbps by enforcing a minimum time window between updates
+        if t_diff < 2.0:
+            return speed_state.get("speed_down", 0.0), speed_state.get("speed_up", 0.0)
 
         # 2. Calcul du delta en octets
         delta_rx = curr_rx - _last_rx
@@ -198,9 +205,12 @@ def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
 
         # Gestion reboot box (compteur qui retombe)
         if delta_rx < 0 or delta_tx < 0:
-            _last_rx = curr_rx
-            _last_tx = curr_tx
-            _last_time = now
+            speed_state["rx"] = curr_rx
+            speed_state["tx"] = curr_tx
+            speed_state["time"] = now
+            speed_state["speed_down"] = 0.0
+            speed_state["speed_up"] = 0.0
+            save_speed_state(speed_state)
             return 0.0, 0.0
 
         # 3. Débit réel
@@ -210,10 +220,10 @@ def update_and_get_speed(curr_rx_bytes, curr_tx_bytes):
         speed_down = rx_bps / 1000.0
         speed_up = tx_bps / 1000.0
 
-        # 4. Mise à jour des références
-        _last_rx = curr_rx
-        _last_tx = curr_tx
-        _last_time = now
+        # Additional safety check against impossible speeds
+        if speed_down > 10000000.0 or speed_up > 10000000.0:
+             speed_down = 0.0
+             speed_up = 0.0
 
         speed_state["rx"] = curr_rx
         speed_state["tx"] = curr_tx
