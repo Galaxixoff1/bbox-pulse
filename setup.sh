@@ -103,7 +103,7 @@ load_env() {
         BBOX_BASE_URL="https://mabbox.bytel.fr"
         REDIS_URL="redis://redis:6379/0"
         APP_PORT="5000"
-        MONITOR_INTERVAL="60"
+        MONITOR_INTERVAL="5"
         UPTIME_START_DATE="$(date +%Y-%m-%d)"
         TARGET_TB="5"
     fi
@@ -146,8 +146,8 @@ setup_initial_env() {
     TARGET_TB=${temp_target:-5}
 
     # Intervalle de collecte
-    read -rp "⏱ Intervalle de collecte des données en secondes [Défaut: 60] : " temp_interval
-    MONITOR_INTERVAL=${temp_interval:-60}
+    read -rp "⏱ Intervalle de collecte des données en secondes [Défaut: 5] : " temp_interval
+    MONITOR_INTERVAL=${temp_interval:-5}
 
     save_env
     echo -e "${GREEN}✓ Fichier de configuration .env généré avec succès !${NC}"
@@ -407,6 +407,69 @@ install_and_start() {
     read -rsp "Appuyez sur Entrée pour continuer..."
 }
 
+# Menu de dépannage et debug
+debug_menu() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
+    echo -e "        🩺  DÉPANNAGE & DEBUG"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  1) 📊 Statut des conteneurs"
+    echo -e "  2) 👷 Vérifier le nombre de workers Gunicorn (attendu : 1)"
+    echo -e "  3) 📜 Afficher les derniers logs (30 lignes)"
+    echo -e "  4) 🧹 Purger l'état de vitesse (corrige les pics erronés, ex : 9,99 Gb/s)"
+    echo -e "  5) 🔙 Retour au menu principal"
+    echo ""
+    echo -ne "Choisissez une option [1-5] : "
+    read -r debug_choice
+
+    case "$debug_choice" in
+        1)
+            echo ""
+            docker ps --filter "name=bbox-pulse" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            ;;
+        2)
+            GUNICORN_PROCS=$(docker top bbox-pulse 2>/dev/null | grep "[g]unicorn" | wc -l)
+            if [ "$GUNICORN_PROCS" -eq 2 ]; then
+                echo -e "${GREEN}✓ 2 processus Gunicorn détectés (master + 1 worker) : configuration correcte.${NC}"
+                echo -e "  L'API locale de la Bbox n'accepte qu'une session à la fois."
+            elif [ "$GUNICORN_PROCS" -gt 2 ]; then
+                echo -e "${RED}⚠️  $GUNICORN_PROCS processus Gunicorn détectés (plusieurs workers) !${NC}"
+                echo -e "  Plusieurs workers provoquent des débits à 0 Mb/s, 0 appareil"
+                echo -e "  et des pics impossibles (sessions Bbox qui s'expirent mutuellement)."
+                echo -e "  → Reconstruisez l'image avec un Dockerfile récent (option 5 du menu principal)."
+            else
+                echo -e "${YELLOW}⚠️  Conteneur bbox-pulse introuvable ou arrêté. Lancez-le d'abord (option 1).${NC}"
+            fi
+            ;;
+        3)
+            echo ""
+            docker compose logs --tail 30 bbox-pulse
+            ;;
+        4)
+            read -rp "Effacer les pics enregistrés et l'état de vitesse ? (les totaux ne sont pas touchés) [O/n] : " purge_confirm
+            purge_confirm=${purge_confirm:-O}
+            if [[ "$purge_confirm" =~ ^[OoYy] ]]; then
+                docker exec bbox-pulse-redis redis-cli DEL bboxpulse:speed_state_v2 >/dev/null 2>&1 && echo -e "${GREEN}✓ État de vitesse purgé dans Redis.${NC}" || echo -e "${YELLOW}⚠️ Redis injoignable (conteneur arrêté ?).${NC}"
+                docker exec bbox-pulse rm -f /app/data/bbox_speed_state_v2.json 2>/dev/null && echo -e "${GREEN}✓ Fallback JSON supprimé.${NC}" || true
+                echo -e "${BLUE}Redémarrage de l'application...${NC}"
+                docker restart bbox-pulse >/dev/null 2>&1 && echo -e "${GREEN}✓ Application redémarrée. Les débits réapparaissent au premier cycle de collecte.${NC}" || echo -e "${YELLOW}⚠️ Redémarrage impossible (conteneur arrêté ?).${NC}"
+            else
+                echo -e "Annulé."
+            fi
+            ;;
+        5)
+            return
+            ;;
+        *)
+            echo -e "${RED}Option invalide !${NC}"
+            sleep 1
+            return
+            ;;
+    esac
+    read -rsp "Appuyez sur Entrée pour continuer..."
+}
+
 # Boucle principale du script
 while true; do
     clear
@@ -421,9 +484,10 @@ while true; do
     echo -e "  4) ⏱️  Planifier le redémarrage automatique (Cron)"
     echo -e "  5) 🛠️  Réparer / Reconstruire les conteneurs"
     echo -e "  6) 🗑️  Désinstaller l'application"
-    echo -e "  7) ❌ Quitter"
+    echo -e "  7) 🩺 Dépannage / Debug"
+    echo -e "  8) ❌ Quitter"
     echo ""
-    echo -ne "Choisissez une option [1-7] : "
+    echo -ne "Choisissez une option [1-8] : "
     read -r main_choice
     
     case "$main_choice" in
@@ -446,6 +510,9 @@ while true; do
             uninstall_project
             ;;
         7)
+            debug_menu
+            ;;
+        8)
             echo -e "${GREEN}Au revoir !${NC}"
             exit 0
             ;;
