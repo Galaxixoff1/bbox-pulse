@@ -75,6 +75,34 @@ Le script `./setup.sh` peut être relancé **à tout moment** et propose un menu
 
 ---
 
+## 🩺 Dépannage
+
+### Débits à 0 Mb/s, 0 appareil, Wi-Fi OFF, ou pics impossibles (ex: 9,99 Gb/s)
+
+L'API locale de la Bbox n'accepte qu'**une seule session à la fois**. BboxPulse doit donc tourner avec **1 seul worker Gunicorn** (c'est le cas depuis cette version).
+
+Si des **pics erronés** avaient été enregistrés par une ancienne version (2 workers = deltas comptés en double), purgez l'état de vitesse :
+
+```bash
+# Purger les pics dans Redis
+docker exec bbox-pulse-redis redis-cli DEL bboxpulse:speed_state_v2
+
+# Et le fallback JSON éventuel
+docker exec bbox-pulse rm -f /app/data/bbox_speed_state_v2.json
+
+# Puis redémarrer l'application
+docker restart bbox-pulse
+```
+
+> Les débits réapparaissent dès le premier cycle de collecte (quelques secondes avec `MONITOR_INTERVAL=5`).
+
+### Rendre le dashboard plus « live »
+
+*   Dans le fichier `.env` : `MONITOR_INTERVAL=5` (collecte toutes les 5 secondes).
+*   Dans la page **Configuration** du dashboard : passer `refresh_interval_ms` à `2000` pour rafraîchir l'affichage toutes les 2 secondes.
+
+---
+
 ## 🛠️ Déploiement Manuel (Alternative)
 
 Si vous préférez installer l'application vous-même sans le script :
@@ -96,8 +124,8 @@ BBOX_PASSWORD=votre_mot_de_passe
 # Port de l'application (Par défaut: 5000)
 APP_PORT=5000
 
-# Intervalle de collecte en secondes (Par défaut: 60)
-MONITOR_INTERVAL=60
+# Intervalle de collecte en secondes (Par défaut: 5)
+MONITOR_INTERVAL=5
 
 # Objectif cible en To (Par défaut: 5)
 TARGET_TB=5

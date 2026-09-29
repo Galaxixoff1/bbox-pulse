@@ -33,6 +33,10 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
-# Start the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "120", "app:app"]
+# Start the application using Gunicorn.
+# IMPORTANT: 1 seul worker obligatoire. L API locale de la Bbox n accepte qu une
+# session a la fois : avec plusieurs workers, chaque process fait son propre login
+# et expire la session de l autre. De plus, un seul thread background_monitor doit
+# ecrire l etat de vitesse, sinon deltas comptes en double = pics impossibles.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "--timeout", "120", "app:app"]
 
