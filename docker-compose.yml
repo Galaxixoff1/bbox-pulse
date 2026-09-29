@@ -10,7 +10,7 @@ services:
       - BBOX_PASSWORD=${BBOX_PASSWORD}
       - BBOX_BASE_URL=${BBOX_BASE_URL:-https://mabbox.bytel.fr}
       - REDIS_URL=redis://redis:6379/0
-      - MONITOR_INTERVAL=${MONITOR_INTERVAL:-60}
+      - MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
       - UPTIME_START_DATE=${UPTIME_START_DATE:-2026-05-18}
       - TARGET_TB=${TARGET_TB:-5}
     volumes:
