@@ -72,6 +72,7 @@ Le script `./setup.sh` peut être relancé **à tout moment** et propose un menu
 4. **Planifier le redémarrage automatique (Cron)** : Configure une tâche Cron système pour planifier le redémarrage automatique du conteneur `bbox-pulse` toutes les X minutes. *Très utile si la connexion avec l'API locale de votre Bbox se fige et nécessite de relancer le conteneur.*
 5. **Réparer / Reconstruire** : Force la reconstruction complète et propre des conteneurs sans cache.
 6. **Désinstaller l'application** : Arrête les conteneurs, supprime les volumes de données Docker, supprime la tâche Cron et propose de nettoyer le fichier `.env`.
+7. **Dépannage / Debug** : Statut des conteneurs, vérification du nombre de workers Gunicorn (attendu : 1), affichage des derniers logs et purge de l'état de vitesse (corrige les pics erronés, ex : pics à 9,99 Gb/s).
 
 ---
 
