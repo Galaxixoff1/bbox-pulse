@@ -435,16 +435,20 @@ debug_menu() {
             docker ps --filter "name=bbox-pulse" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
             ;;
         2)
-            GUNICORN_PROCS=$(docker top bbox-pulse 2>/dev/null | grep "[g]unicorn" | wc -l)
+            # Ne pas compter docker-init (init: true dans docker-compose.yml) :
+            # sa ligne de commande contient "gunicorn" alors que ce n'est pas un worker.
+            GUNICORN_PROCS=$(docker top bbox-pulse -o args 2>/dev/null | grep "[g]unicorn" | grep -v "[d]ocker-init" | wc -l)
+            RUNNING_WORKERS=$(docker inspect bbox-pulse --format '{{.Config.Cmd}}' 2>/dev/null | grep -oE -- '--workers [0-9]+')
             if [ "$GUNICORN_PROCS" -eq 2 ]; then
                 echo -e "${GREEN}✓ 2 processus Gunicorn détectés (master + 1 worker) : configuration correcte.${NC}"
                 echo -e "  L'API locale de la Bbox n'accepte qu'une session à la fois."
+                [ -n "$RUNNING_WORKERS" ] && echo -e "  Image actuelle : gunicorn ${RUNNING_WORKERS}"
             elif [ "$GUNICORN_PROCS" -gt 2 ]; then
                 echo -e "${RED}⚠️  $GUNICORN_PROCS processus Gunicorn détectés (plusieurs workers) !${NC}"
                 echo -e "  Plusieurs workers provoquent des débits à 0 Mb/s, 0 appareil"
                 echo -e "  et des pics impossibles (sessions Bbox qui s'expirent mutuellement)."
-                echo -e "  Commande réellement en cours dans le conteneur :"
-                docker top bbox-pulse -o args 2>/dev/null | grep "[g]unicorn" | head -1 || echo -e "  (indisponible)"
+                echo -e "  Commande de l'image en cours dans le conteneur :"
+                docker inspect bbox-pulse --format '{{.Config.Cmd}}' 2>/dev/null || echo -e "  (indisponible)"
                 echo -e "  → Code local probablement obsolète (ancien Dockerfile avec --workers 2)."
                 echo -e "  → Lancez l'option 3) Mettre à jour BboxPulse (git pull + reconstruction),"
                 echo -e "     ou faites un git pull manuel puis relancez l'option 5 (Réparer)."
