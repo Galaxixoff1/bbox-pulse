@@ -352,6 +352,12 @@ update_project() {
 repair_project() {
     echo -e "\n${BLUE}🛠️  Réparation de BboxPulse...${NC}"
     install_docker_if_needed
+    # Mettre à jour le code local avant de reconstruire :
+    # sinon on reconstruit l'ancien Dockerfile (ex : --workers 2) en boucle.
+    if [ -d .git ] && command -v git >/dev/null 2>&1; then
+        echo -e "${BLUE}Mise à jour du code source (git pull)...${NC}"
+        git pull --ff-only || echo -e "${YELLOW}⚠️ git pull impossible (modifications locales ?) : reconstruction avec le code local actuel.${NC}"
+    fi
     echo -e "${BLUE}Arrêt des conteneurs existants...${NC}"
     docker compose down || true
     echo -e "${BLUE}Reconstruction complète et démarrage sans cache...${NC}"
@@ -437,7 +443,11 @@ debug_menu() {
                 echo -e "${RED}⚠️  $GUNICORN_PROCS processus Gunicorn détectés (plusieurs workers) !${NC}"
                 echo -e "  Plusieurs workers provoquent des débits à 0 Mb/s, 0 appareil"
                 echo -e "  et des pics impossibles (sessions Bbox qui s'expirent mutuellement)."
-                echo -e "  → Reconstruisez l'image avec un Dockerfile récent (option 5 du menu principal)."
+                echo -e "  Commande réellement en cours dans le conteneur :"
+                docker top bbox-pulse -o args 2>/dev/null | grep "[g]unicorn" | head -1 || echo -e "  (indisponible)"
+                echo -e "  → Code local probablement obsolète (ancien Dockerfile avec --workers 2)."
+                echo -e "  → Lancez l'option 3) Mettre à jour BboxPulse (git pull + reconstruction),"
+                echo -e "     ou faites un git pull manuel puis relancez l'option 5 (Réparer)."
             else
                 echo -e "${YELLOW}⚠️  Conteneur bbox-pulse introuvable ou arrêté. Lancez-le d'abord (option 1).${NC}"
             fi
