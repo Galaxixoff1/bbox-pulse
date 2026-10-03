@@ -681,7 +681,16 @@ def api_stats():
         current_to_floor = math.floor(total_down / (1024**4))
         computed_target = max(target_tb, current_to_floor + 1)
         target_bytes = computed_target * (1024**4)
-        progress = min((total_down / target_bytes) * 100, 100)
+
+        # Progression mesurée sur le palier en cours :
+        # - avant d'atteindre l'objectif configuré : depuis 0 To
+        # - en montée automatique (+1 To par palier) : depuis le palier
+        #   précédent, pour repartir de 0 % à chaque nouveau palier
+        if current_to_floor + 1 <= target_tb:
+            base_bytes = 0
+        else:
+            base_bytes = (computed_target - 1) * (1024**4)
+        progress = min(max((total_down - base_bytes) / (target_bytes - base_bytes) * 100, 0), 100)
 
         # ETA & Average Speed Calculation
         try:
